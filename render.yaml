@@ -1,0 +1,42 @@
+services:
+  - type: web
+    name: promptforge
+    runtime: docker
+    plan: free
+    healthCheckPath: /up
+    envVars:
+      - key: APP_NAME
+        value: PromptForge
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_KEY
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: DB_URL
+        fromDatabase:
+          name: promptforge-db
+          property: connectionString
+      - key: SESSION_DRIVER
+        value: database
+      - key: CACHE_STORE
+        value: database
+      - key: QUEUE_CONNECTION
+        value: database
+      - key: PIXELFORGE_API_KEY
+        sync: false
+      - key: PIXELFORGE_WEBHOOK_SECRET
+        sync: false
+      - key: ADMIN_EMAILS
+        value: admin@site.com,ashiqur.tsk@gmail.com
+
+databases:
+  - name: promptforge-db
+    plan: free
+    databaseName: promptforge

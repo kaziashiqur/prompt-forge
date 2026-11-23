@@ -13,6 +13,8 @@ use Throwable;
 class SubmitGeneration implements ShouldQueue {
     use Queueable;
 
+    private const MAX_SUBMIT_ATTEMPTS = 8;
+
     public int $tries = 60;
 
     public int $maxExceptions = 5;
@@ -45,7 +47,17 @@ class SubmitGeneration implements ShouldQueue {
             $object = $client->createGeneration($params, $gen->uuid);
         } catch (PixelforgeException $e) {
             if ($e->isRetryable() && ! $e->isDailyLimit()) {
-                $this->release(max(1, $e->retryAfter ?? 5));
+                if ($this->attempts() < self::MAX_SUBMIT_ATTEMPTS) {
+                    $backoff = min(60, 2 ** ($this->attempts() - 1));
+                    $this->release(max(1, $e->retryAfter ?? 0, $backoff));
+                    return;
+                }
+
+                $sync->failBeforeSubmit(
+                    $gen,
+                    $e->errorCode ?? 'submit_failed',
+                    'Pixelforge was busy for too long. You were not charged; please try again.',
+                );
                 return;
             }
 

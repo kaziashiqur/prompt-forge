@@ -139,6 +139,29 @@ class PixelforgeFlowTest extends TestCase
         Http::assertSent(fn ($r) => $r->hasHeader('Idempotency-Key', $gen->uuid));
     }
 
+    public function test_overload_gives_up_for_free_after_the_last_attempt(): void
+    {
+        $this->createResponse = fn () => Http::response(
+            ['error' => ['type' => 'api_error', 'code' => 'overloaded', 'message' => 'Busy']],
+            503,
+            ['Retry-After' => '2'],
+        );
+        $user = $this->userWithCredits(1);
+        Queue::fake();
+        $this->actingAs($user)->post('/generations', ['prompt' => 'A cat', 'size' => '1024x1024', 'quality' => 'low']);
+        $gen = Generation::first();
+
+        $job = (new SubmitGeneration($gen))->withFakeQueueInteractions();
+        $job->job->attempts = 8;
+        $job->handle(app(\App\Services\Pixelforge\PixelforgeClient::class), app(\App\Services\Pixelforge\GenerationSync::class));
+
+        $job->assertNotReleased();
+        $gen->refresh();
+        $this->assertSame(Generation::FAILED, $gen->status);
+        $this->assertSame(0, $gen->charge_nanos);
+        $this->assertSame(1_000_000_000, $user->fresh()->balance_nanos);
+    }
+
     public function test_rejected_prompt_fails_for_free(): void
     {
         $this->createResponse = fn () => Http::response(
